@@ -16,37 +16,34 @@ class DataPreprocessor:
         get_smiles_from_name: Fetches SMILES notations for compounds using PubChem's API.
     '''
 
-    def clean_unknow_threshold(csv_file, threshold_column):
+    def clean_unknow_threshold(data, threshold_column):
         '''
         Removes rows containing 'unknown' values in the specified threshold column.
 
         Args:
-            csv_file (str): Path to the input CSV file.
+            data (pandas.DataFrame): DataFrame with the input data.
             threshold_column (str): Name of the column to check for 'unknown' values.
 
         Returns:
             pandas.DataFrame: A new DataFrame with rows containing 'unknown' values removed.
         '''
 
-        data = pd.read_csv(csv_file)
         new_data = data[~data[threshold_column].str.contains('unknown')]
         return new_data
     
-    def calculate_mean_from_range(csv_file, threshold_col):
+    def calculate_mean_from_range(data, threshold_col):
 
         '''
         Processes a column containing numeric ranges and calculates their mean values.
 
         Args:
-            csv_file (str): Path to the input CSV file.
+            data (pandas.DataFrame): DataFrame with the input data
             threshold_col (str): Name of the column containing range strings (e.g., "1-5").
 
         Returns:
             pandas.DataFrame: The input DataFrame with an additional 'processed_threshold' column
                             containing the calculated mean values.
         '''
-
-        data = pd.read_csv(csv_file)
 
         def process_values(value):
             if '-' in value:
@@ -60,7 +57,7 @@ class DataPreprocessor:
         return data
         
 
-    def convert_units_ppm(csv_file, threshold_column, units_column):
+    def convert_units_ppm(data, threshold_column, units_column):
 
         '''
         Converts various concentration units to parts per million (ppm).
@@ -68,7 +65,7 @@ class DataPreprocessor:
         Supported units: ppm, µg/kg, ng/g, µg/L, ppb, mg/m3, mg/kg.
 
         Args:
-            csv_file (str): Path to the input CSV file.
+            data (pandas.DataFrame): DataFrame with the input data.
             threshold_column (str): Name of the column containing concentration values.
             units_column (str): Name of the column containing unit strings.
 
@@ -77,20 +74,19 @@ class DataPreprocessor:
                             containing the converted values.
         '''
 
-        data = pd.read_csv(csv_file)
         conversion_factor = {'ppm': 1, 'µg/kg': 1, 'ng/g': 0.001, 'µg/L': 1, 'ppb': 0.001, 'mg/m3': 1000, 'mg/kg': 1000}
 
         data['Threshold_ppm'] = data.apply(lambda row: row[threshold_column] * conversion_factor[row[units_column]], axis=1)
 
         return data
     
-    def get_smiles_from_name(csv_file, name_col):
+    def get_smiles_from_name(data, name_col):
 
         '''
         Fetches SMILES notations for compounds using PubChem's REST API.
 
         Args:
-            csv_file (str): Path to the input CSV file.
+            data (pandas.DataFrame): DataFrame with the input data. 
             name_col (str): Name of the column containing compound names.
 
         Returns:
@@ -104,7 +100,6 @@ class DataPreprocessor:
             lookup to the console.
         '''
 
-        data = pd.read_csv(csv_file)
         compound_names = data[name_col]
         smiles_list = []
 
