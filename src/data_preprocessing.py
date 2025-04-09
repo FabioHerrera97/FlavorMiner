@@ -15,7 +15,6 @@ class DataPreprocessor:
         calculate_mean_from_range: Calculates mean values from range strings (e.g., "1-5" becomes 3).
         convert_units_ppm: Converts various concentration units to parts per million (ppm).
         get_smiles_from_name: Fetches SMILES notations for compounds using PubChem's API.
-        get_threshold_info: Extracts threshold values and units from text data in the specified column.
     '''
     def __init__(self, data=None):
         '''
@@ -130,48 +129,3 @@ class DataPreprocessor:
         self.data['smiles'] = smiles_list
         return self.data
     
-    def get_threshold_info(self, threshold_col):
-        '''
-        Extracts threshold values and units from text data in the specified column.
-
-        Parses text in the given column to identify detection thresholds or levels, extracting both
-        the numerical value/range and the units of measurement. The results are stored in two new
-        columns ('Threshold_value' and 'Units') in the DataFrame.
-
-        Args:
-            threshold_col (str): Name of the column containing threshold information text to parse.
-
-        Returns:
-            pd.DataFrame: The modified DataFrame with two new columns:
-                - 'Threshold_value': Contains extracted threshold values (may be single values or ranges)
-                - 'Units': Contains the units of measurement (e.g., 'ppb', 'µg', 'ppm')
-
-        Notes:
-            - The function looks for patterns like "detection level 5-10 ppb" or "threshold at 0.5ppm"
-            - Value ranges can be expressed with "to", "-", or commas (e.g., "1 to 5", "1-5", "1,000-5,000")
-            - Supported units include: ppb, ppm, µg, ng, pb (with various combinations)
-            - If no threshold is found, both new columns will contain None for that row
-        '''
-        def extract_threshold_info(text):
-
-            pattern = r'''
-                (?:detection\s*(?:level|threshold)?|at|as|is)\s*  # keywords before value
-                ([\d.,]+\s*(?:to|-)\s*[\d.,]+)                    # Value or range
-                \s*([µm]?[gpn]b|ppm|ppb)                          # Units
-                '''
-            match = re.search(pattern, text, re.IGNORECASE | re.VERBOSE)
-
-            if match:
-                value_range = match.group(1).strip()
-                units = match.group(2).strip()
-
-                value_range = value_range.replace('to', '-').replace(',', '')
-                value_range = re.sub(r'\s*-\*', '-', value_range)
-
-                return pd.Series([value_range, units])
-            
-            return pd.Series([None, None])
-        
-        self.data[['Threshold_value', 'Units']] = self.data[threshold_col].apply(extract_threshold_info)
-
-        return self.data
