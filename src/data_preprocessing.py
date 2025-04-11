@@ -1,6 +1,4 @@
-import pandas as pd
 import requests
-import re
 
 class DataPreprocessor:
 
@@ -54,11 +52,14 @@ class DataPreprocessor:
         '''
 
         def process_values(value):
-            if '-' in value:
-                start, end = map(float, value.split('-'))
-                return (start + end) / 2
-            else:
-                return float(value)
+            try:
+                if '-' in value:
+                    start, end = map(float, value.split('-'))
+                    return (start + end) / 2
+                else:
+                    return float(value)
+            except ValueError:
+                return float('nan')
             
         self.data['processed_threshold'] = self.data[threshold_col].apply(process_values)
 

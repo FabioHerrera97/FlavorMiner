@@ -3,16 +3,15 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Descriptors, AllChem
 from rdkit.ML.Descriptors import MoleculeDescriptors
-from molfeat.cal import FPCalculator, DescriptorCalculator
 from molfeat.trans.fp import FPVecTransformer
 from molfeat.trans.pretrained import PretrainedMolTransformer
-from molfeat.trans.pretrained.hf_transformers import PretrainedHFTTransformer
+from molfeat.trans.pretrained.hf_transformers import PretrainedHFTransformer
 from molfeat.trans.pretrained import GraphormerTransformer
-from deepchem.feat import MolGraphFeaturizer
+from deepchem.feat import MolGraphConvFeaturizer
 from molpipeline import Pipeline
 from molpipeline.any2mol import AutoToMol
 from molpipeline.mol2mol import (ElementFilter, MetalDisconnector, SaltRemover, StereoRemover, SolventRemover, 
-                                 TautomerCanonicalizer, Uncarger)
+                                 TautomerCanonicalizer, Uncharger)
 
 class MoleculeManager:
 
@@ -25,8 +24,7 @@ class MoleculeManager:
 
     Attributes:
         data (pd.DataFrame): Input data containing molecular information.
-        maccs_calculator (FPCalculator): Calculator for MACCS fingerprints.
-        graph_featurizer (MolGraphFeaturizer): Featurizer for graph convolutional features.
+        graph_featurizer (MolGraphConvFeaturizer): Featurizer for graph convolutional features.
         molbert_transformer (PretrainedMolTransformer): Transformer for MolBERT embeddings.
         molformer_transformer (PretrainedMolTransformer): Transformer for MolFormer embeddings.
         molt5_transformer (PretrainedHFTTransformer): Transformer for MolT5 embeddings.
@@ -59,9 +57,7 @@ class MoleculeManager:
             data (pd.DataFrame, optional): Direct DataFrame input. Defaults to None.
         '''
         
-        self.data = data
-        self.maccs_calculator = FPCalculator('maccs')
-        self.graph_featurizer = MolGraphFeaturizer()
+        self.data = data if data is not None else pd.DataFrame()
         self.molbert_transformer = None
         self.molformer_transformer = None
         self.molt5_transformer = None
@@ -74,6 +70,7 @@ class MoleculeManager:
         Applies a standardized chemical transformation pipeline to SMILES strings.
 
         Performs a series of chemical standardizations including:
+        - Removal of invalid SMILES
         - Conversion to molecule objects
         - Metal disconnection
         - Solvent removal
@@ -90,20 +87,29 @@ class MoleculeManager:
             list: Standardized SMILES strings after all transformations
         '''
 
+        valid_smiles = [smiles for smiles in self.data[smiles_col] if Chem.MolFromSmiles(smiles) is not None]
+
+        if len(valid_smiles) < len(self.data[smiles_col]):
+            print(f'⚠️ Warning: {len(self.data[smiles_col]) - len(valid_smiles)} invalid SMILES removed')
+
+        self.data = self.data[self.data[smiles_col].isin(valid_smiles)]
+
         pipeline_standardization = Pipeline([
             ('auto2mol', AutoToMol()),
             ('Metal_disconnector', MetalDisconnector()),
             ('Solvent_remover', SolventRemover()),
             ('Salt_remover', SaltRemover()),
             ('Element_remover', ElementFilter()),
-            ('Uncharge', Uncarger()),
+            ('Uncharge', Uncharger()),
             ('Stereo_remover', StereoRemover()),
             ('Canonical_tautomer', TautomerCanonicalizer())
         ])
 
         standardized_smiles = pipeline_standardization.transform(self.data[smiles_col])
+        self.data['standardized_smiles'] = standardized_smiles
+        self.data= self.data[~self.data['standardized_smiles'].astype(str).str.contains('InvalidInstance')]
 
-        return standardized_smiles
+        return self.data
     
     def create_mols_from_smiles(self, stand_smiles_col):
         '''
@@ -157,7 +163,7 @@ class MoleculeManager:
 
         return molecules_3d
     
-    def compute_ecfp(self, mols, radius, nBits=1024):
+    def compute_ecfp(self, mols):
 
         '''
         Computes Extended Connectivity FingerPrints (ECFP) for a list of molecules.
@@ -179,10 +185,9 @@ class MoleculeManager:
             - Larger nBits reduces collision probability but increases dimensionality
         '''
 
-        ecfp = [AllChem.GetMorganFingerprintAsBitVector(mol, radius=radius, nBits=nBits) for mol in mols]
-        ecfp_name = [f'Bit_{i}' for i in range(nBits)]
-        ecfp_bits = [list(x) for x in ecfp]
-        df_ecfp = pd.DataFrame(ecfp_bits, index= self.data.index, columns= ecfp_name)
+        ecfp_calculator = FPVecTransformer(kind='ecfp', dtype=float)
+        ecfp = [ecfp_calculator(i) for i in mols]
+        df_ecfp = pd.DataFrame(ecfp, index=self.data.index)
         df_all = pd.concat([self.data, df_ecfp], axis=1)
 
         return df_all
@@ -207,8 +212,8 @@ class MoleculeManager:
             - Useful for coarse similarity screening
             - Less flexible but more interpretable than ECFP
         '''
-       
-        maccs = [self.maccs_calculator(i) for i in mols]
+        maccs_calculator = FPVecTransformer(kind = 'maccs', dtype=float)
+        maccs = [maccs_calculator(i) for i in mols]
         df_maccs = pd.DataFrame(maccs, index=self.data.index)
         df_all = pd.concat([self.data, df_maccs], axis=1)
 
@@ -304,8 +309,9 @@ class MoleculeManager:
         '''
         
         def featurize_smiles(smiles):
+            graph_featurizer = MolGraphConvFeaturizer(use_edges=True)
             try:
-                features = self.graph_featurizer.featurize([smiles])[0]
+                features = graph_featurizer.featurize([smiles])[0]
                 return features
             except:
                 return None
@@ -439,7 +445,7 @@ class MoleculeManager:
         '''
 
         if self.molt5_transformer is None:
-            self.molt5_transformer = PretrainedHFTTransformer(kind='molT5', notation='smiles', dtype=float)
+            self.molt5_transformer = PretrainedHFTransformer(kind='molT5', notation='smiles', dtype=float)
         molt5_vectors = [self.molt5_transformer(i) for i in smiles_list]
         df_molt5 = pd.DataFrame(molt5_vectors, index=self.data.index)
         df_all = pd.concat([self.data, df_molt5], axis=1)
@@ -470,7 +476,7 @@ class MoleculeManager:
         '''
 
         if self.hemberta_2_mtr_transformer is None:
-            self.chemberta_2_mtr_transformer = PretrainedHFTTransformer(kind='ChemBERTa-77M-MTR', notation='smiles', dtype=float)
+            self.chemberta_2_mtr_transformer = PretrainedHFTransformer(kind='ChemBERTa-77M-MTR', notation='smiles', dtype=float)
         chemberta2_mtr_vectors = [self.chemberta_2_mtr_transformer(i) for i in smiles_list]
         df_chemberta2_mtr = pd.DataFrame(chemberta2_mtr_vectors, index=self.data.index)
         df_all = pd.concat([self.data, df_chemberta2_mtr], axis=1)
@@ -502,7 +508,7 @@ class MoleculeManager:
 
         '''
         if self.chemberta_2_mtr_transformer is None:
-            self.chemberta_2_mtr_transformer = PretrainedHFTTransformer(kind='ChemBERTa-77M-MTR', notation='smiles', dtype=float)
+            self.chemberta_2_mtr_transformer = PretrainedHFTransformer(kind='ChemBERTa-77M-MTR', notation='smiles', dtype=float)
         chemberta2_mtr_vectors = [self.chemberta_2_mtr_transformer(i) for i in smiles_list]
         df_chemberta2_mtr = pd.DataFrame(chemberta2_mtr_vectors, index=self.data.index)
         df_all = pd.concat([self.data, df_chemberta2_mtr], axis=1)
