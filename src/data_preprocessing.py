@@ -1,4 +1,5 @@
 import requests
+from tqdm import tqdm
 
 class DataPreprocessor:
 
@@ -110,22 +111,21 @@ class DataPreprocessor:
         compound_names = self.data[name_col]
         smiles_list = []
 
-        for i in compound_names:
-
+        for i in tqdm(compound_names, desc="Fetching SMILES", unit="compound"):
             i = i.replace(' ', '')
             try:
                 url = f'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{i}/property/CanonicalSMILES/TXT'
                 smiles = requests.get(url).text.rstrip()
                 smiles_list.append(smiles)
 
-                if ('NotFound' in smiles):
-                    print(i, ': Not found ❌ ')
+                if 'NotFound' in smiles:
+                    tqdm.write(f"{i}: Not found ❌")  # tqdm.write to avoid breaking the progress bar
                 else:
-                    print(i, ': smiles found ✅')
-            except:
-                smiles = 'Problem with the url'
+                    tqdm.write(f"{i}: SMILES found ✅")
+            except Exception as e:
+                smiles = f'Problem with the URL: {str(e)}'
                 smiles_list.append(smiles)
-                print(i, ': There was an error in the url of this compound ⚠️')
+                tqdm.write(f"{i}: Error in the URL ⚠️")
 
         self.data['smiles'] = smiles_list
         return self.data
