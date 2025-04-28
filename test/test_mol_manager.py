@@ -44,6 +44,17 @@ class TestMoleculeManager(unittest.TestCase):
         self.assertEqual(len(result), len(mols))
         for mol in result:
             self.assertIsNotNone(mol.GetConformer())
+
+    def test_compute_rdkit_descriptors(self):
+        mols = [Chem.MolFromSmiles('CCO'), Chem.MolFromSmiles('CC(=O)O')]
+        df = self.manager.compute_rdkit_descriptors(mols)
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(df), 2)  # Two molecules
+        self.assertGreater(len(df.columns), 0)
+        
+        for idx in df.index:
+            self.assertFalse(df.loc[idx].isnull().all())
+        
  
 if __name__ == '__main__':
     unittest.main()
