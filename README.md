@@ -15,6 +15,6 @@ Flavor is the main factor driving consumers acceptance of food products. However
 
 The Google Colab Notebook linked down contains detailed instructions to Run FlavorMiner.
 
-[FlavorMiner.ipynb](https://github.com/FabioHerrera97/FlavorMiner/blob/main/FlavorMiner.ipynb)
+[FlavorMiner.ipynb](https://colab.research.google.com/drive/1sNpXTcogeKgAj0-2caC9Hn2VFnjkqH5G?usp=sharing)
 
 # PAPER UNDER REVIEW
